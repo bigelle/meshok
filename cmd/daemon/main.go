@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -28,7 +29,8 @@ func main() {
 		logger.Fatal("failed to start discovery server", zap.Error(err))
 	}
 
-	// lock the main thread
-	for {
+	entries, _ := d.Entries()
+	for e := range entries {
+		fmt.Printf("new entry: %+v\n", e)
 	}
 }

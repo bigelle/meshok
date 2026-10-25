@@ -3,8 +3,6 @@ package discovery
 import (
 	"context"
 	"errors"
-	"fmt"
-	"sync"
 
 	"github.com/hashicorp/mdns"
 )
@@ -37,9 +35,12 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 	}
 	s.ann = ann
 
-	mdns.Lookup(service.Service, s.ch)
+	params := mdns.DefaultParams(service.Service)
+	params.Entries = s.ch
+	mdns.QueryContext(ctx, params)
 
 	go func() {
+		defer close(s.ch)
 		for {
 			select {
 			case <-ctx.Done():
@@ -56,7 +57,6 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 
 func (s *Server) Stop() error {
 	err := s.ann.Shutdown()
-	close(s.ch)
 	return err
 }
 
