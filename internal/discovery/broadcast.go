@@ -3,27 +3,40 @@ package discovery
 import (
 	"context"
 	"errors"
+	"os"
+	"time"
 
 	"github.com/hashicorp/mdns"
+	"go.uber.org/zap"
 )
 
-func NewServer() *Server {
-	return &Server{}
+func NewServer() (*Server, error) {
+	host, err := os.Hostname()
+	if err != nil {
+		return nil, errors.New("can not resolve system's host name")
+	}
+	return &Server{host: host}, nil
 }
 
 type Server struct {
-	ch  chan *mdns.ServiceEntry
-	ann *mdns.Server
+	host    string
+	entries chan *mdns.ServiceEntry
+	ann     *mdns.Server
+	logger  *zap.Logger
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	service, err := mdns.NewMDNSService("host", "_meshok._tcp", "", "", 52867, nil, nil)
+	host := s.host + ".local."
+	service, err := mdns.NewMDNSService(String(6), "_meshok._tcp", "", host, 52867, nil, nil)
 	if err != nil {
 		return err
 	}
-
-	ch := make(chan *mdns.ServiceEntry, 4)
-	s.ch = ch
+	if s.logger == nil {
+		// FIXME: idk in which case it could happen,
+		// but if this ever returns an error,
+		// i should handle it
+		s.logger, _ = zap.NewDevelopment()
+	}
 
 	return s.serve(service, ctx)
 }
@@ -35,20 +48,42 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 	}
 	s.ann = ann
 
+	ticker := time.NewTicker(3 * time.Second)
+
 	params := mdns.DefaultParams(service.Service)
-	params.Entries = s.ch
-	mdns.QueryContext(ctx, params)
+
+	// this includes advertisements sent by this client
+	rawEntries := make(chan *mdns.ServiceEntry, 4)
+	params.Entries = rawEntries
+	// and this is not
+	s.entries = make(chan *mdns.ServiceEntry, 4)
 
 	go func() {
-		defer close(s.ch)
+		defer close(s.entries)
 		for {
 			select {
 			case <-ctx.Done():
+				ticker.Stop()
 				return
-			// Do i need to do something with entries here?
-			// case entry := <- ch:
-			default:
-				continue
+
+			case <-ticker.C:
+				go func() {
+					err = mdns.QueryContext(ctx, params)
+					if err != nil {
+						s.logger.Error("failed to query mDNS entries", zap.Error(err))
+					}
+				}()
+
+			case entry, ok := <-rawEntries:
+				if !ok {
+					return
+				}
+				// filtering ourself out
+				// FIXME: this is not enough
+				if entry.Name == service.Instance+"._meshok._tcp.local." {
+					continue
+				}
+				s.entries <- entry
 			}
 		}
 	}()
@@ -61,8 +96,8 @@ func (s *Server) Stop() error {
 }
 
 func (s *Server) Entries() (chan *mdns.ServiceEntry, error) {
-	if s.ch == nil {
+	if s.entries == nil {
 		return nil, errors.New("discovery server is shut down")
 	}
-	return s.ch, nil
+	return s.entries, nil
 }
