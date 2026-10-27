@@ -3,6 +3,7 @@ module github.com/bigelle/meshok
 go 1.27.1
 
 require (
+	github.com/dustinkirkland/golang-petname v0.0.0-20261016130456-fdd95a3d0543 // indirect
 	github.com/hashicorp/mdns v1.0.7 // indirect
 	github.com/miekg/dns v1.1.73 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

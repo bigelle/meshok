@@ -10,24 +10,42 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	SERVICE_NAME string = "_meshok._tcp"
+	DOMAIN       string = "local."
+	PORT         int    = 52867
+)
+
 func NewServer() (*Server, error) {
 	host, err := os.Hostname()
 	if err != nil {
 		return nil, errors.New("can not resolve system's host name")
 	}
-	return &Server{host: host}, nil
+	host += "."
+	return &Server{
+		host:     host,
+		instance: NewInstanceName(),
+	}, nil
 }
 
 type Server struct {
-	host    string
-	entries chan *mdns.ServiceEntry
-	ann     *mdns.Server
-	logger  *zap.Logger
+	host     string
+	instance string
+	entries  chan *mdns.ServiceEntry
+	ann      *mdns.Server
+	logger   *zap.Logger
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	host := s.host + ".local."
-	service, err := mdns.NewMDNSService(String(6), "_meshok._tcp", "", host, 52867, nil, nil)
+	service, err := mdns.NewMDNSService(
+		s.instance,
+		SERVICE_NAME,
+		DOMAIN,
+		s.host,
+		PORT,
+		nil, // IPs
+		nil, // TXT
+	)
 	if err != nil {
 		return err
 	}
@@ -79,7 +97,7 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 					return
 				}
 				// filtering ourself out
-				// FIXME: this is not enough
+				// FIXME: this is not enough (but for now it works fine)
 				if entry.Name == service.Instance+"._meshok._tcp.local." {
 					continue
 				}

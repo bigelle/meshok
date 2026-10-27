@@ -1,24 +1,11 @@
 package discovery
 
 import (
-	"math/rand"
-	"time"
+	petname "github.com/dustinkirkland/golang-petname"
 )
 
-const charset = "abcdefghijklmnopqrstuvwxyz" +
-	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+func NewInstanceName() string {
+	pet := petname.New(nil)
 
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()))
-
-func StringWithCharset(length int, charset string) string {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
-func String(length int) string {
-	return StringWithCharset(length, charset)
+	return pet.Adjective() + "_" + pet.Adverb()
 }
