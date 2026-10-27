@@ -16,7 +16,13 @@ const (
 	PORT         int    = 52867
 )
 
-func NewServer() (*Server, error) {
+type ServerConfig struct {
+	DeviceID  string // currently no use
+	NetworkID string // currently no use
+	Logger    *zap.Logger
+}
+
+func NewServer(cfg *ServerConfig) (*Server, error) {
 	host, err := os.Hostname()
 	if err != nil {
 		return nil, errors.New("can not resolve system's host name")
@@ -25,6 +31,7 @@ func NewServer() (*Server, error) {
 	return &Server{
 		host:     host,
 		instance: NewInstanceName(),
+		logger:   cfg.Logger,
 	}, nil
 }
 

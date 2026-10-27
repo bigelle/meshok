@@ -23,7 +23,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	d, err := discovery.NewServer()
+	d, err := discovery.NewServer(&discovery.ServerConfig{
+		Logger: logger,
+	})
 	if err != nil {
 		logger.Fatal("failed to create new discovery server", zap.Error(err))
 	}
