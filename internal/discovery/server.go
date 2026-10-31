@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"time"
 
@@ -19,7 +20,12 @@ const (
 type ServerConfig struct {
 	DeviceID  string // currently no use
 	NetworkID string // currently no use
-	Logger    *zap.Logger
+	Logger    *slog.Logger
+}
+
+type ServerInfo struct {
+	Host     string
+	Instance string
 }
 
 func NewServer(cfg *ServerConfig) (*Server, error) {
@@ -27,28 +33,32 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, errors.New("can not resolve system's host name")
 	}
-	host += "."
 	return &Server{
-		host:     host,
-		instance: NewInstanceName(),
-		logger:   cfg.Logger,
+		info: ServerInfo{
+			Host:     host,
+			Instance: NewInstanceName(),
+		},
+		logger: cfg.Logger,
 	}, nil
 }
 
 type Server struct {
-	host     string
-	instance string
-	entries  chan *mdns.ServiceEntry
-	ann      *mdns.Server
-	logger   *zap.Logger
+	info    ServerInfo
+	entries chan *mdns.ServiceEntry
+	ann     *mdns.Server
+	logger  *slog.Logger
+}
+
+func (s *Server) ServerInfo() ServerInfo {
+	return s.info
 }
 
 func (s *Server) Start(ctx context.Context) error {
 	service, err := mdns.NewMDNSService(
-		s.instance,
+		s.info.Instance,
 		SERVICE_NAME,
 		DOMAIN,
-		s.host,
+		s.info.Host+".",
 		PORT,
 		nil, // IPs
 		nil, // TXT
@@ -57,10 +67,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	if s.logger == nil {
-		// FIXME: idk in which case it could happen,
-		// but if this ever returns an error,
-		// i should handle it
-		s.logger, _ = zap.NewDevelopment()
+		panic("logger is nil")
 	}
 
 	return s.serve(service, ctx)

@@ -3,36 +3,50 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/bigelle/meshok/internal/discovery"
+	"github.com/bigelle/meshok/internal/logger"
 	"go.uber.org/zap"
 )
 
 func main() {
-	logger, err := zap.NewProduction()
+	logger, closure, err := logger.New(zap.NewAtomicLevelAt(zap.DebugLevel))
 	if err != nil {
-		// in which case this could happen?
-		log.Fatal("failed to start zap logger")
+		fmt.Fprintf(os.Stderr, "failed to set up logger: %s", err.Error())
+		os.Exit(1)
 	}
-	defer logger.Sync()
+	defer closure()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	logger.Debug("listening for OS signals",
+		"signals", []string{"Interrupt", "SIGTERM"},
+	)
 
 	d, err := discovery.NewServer(&discovery.ServerConfig{
 		Logger: logger,
 	})
 	if err != nil {
-		logger.Fatal("failed to create new discovery server", zap.Error(err))
+		logger.Error("failed to create discovery service", "error", err)
+		os.Exit(1)
 	}
 
+	info := d.ServerInfo()
+	logger.Debug("created mDNS server",
+		"hostname", info.Host,
+		"instance name", info.Instance,
+	)
+
 	if err := d.Start(ctx); err != nil {
-		logger.Fatal("failed to start discovery server", zap.Error(err))
+		logger.Error("failed to start discovery server", "error", err)
+		os.Exit(1)
 	}
+	logger.Debug("mDNS server is online",
+		"advertising port", discovery.PORT,
+	)
 
 	entries, _ := d.Entries()
 	for e := range entries {
