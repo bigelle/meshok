@@ -5,10 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/mdns"
-	"go.uber.org/zap"
 )
 
 const (
@@ -102,7 +103,9 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 				go func() {
 					err = mdns.QueryContext(ctx, params)
 					if err != nil {
-						s.logger.Error("failed to query mDNS entries", zap.Error(err))
+						s.logger.Error("failed to query mDNS entries",
+							"error", err,
+						)
 					}
 				}()
 
@@ -111,8 +114,7 @@ func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
 					return
 				}
 				// filtering ourself out
-				// FIXME: this is not enough (but for now it works fine)
-				if entry.Name == service.Instance+"._meshok._tcp.local." {
+				if isLocalEntry(entry, service) {
 					continue
 				}
 				s.entries <- entry
@@ -132,4 +134,20 @@ func (s *Server) Entries() (chan *mdns.ServiceEntry, error) {
 		return nil, errors.New("discovery server is shut down")
 	}
 	return s.entries, nil
+}
+
+func isLocalEntry(newEntry *mdns.ServiceEntry, thisService *mdns.MDNSService) bool {
+	// filter out loopbacks
+	if newEntry.AddrV4.IsLoopback() {
+		return true
+	}
+	if newEntry.AddrV6.IsLoopback() {
+		return true
+	}
+
+	// filter out same host
+	if newEntry.Host == thisService.HostName {
+		return true
+	}
+	return false
 }
