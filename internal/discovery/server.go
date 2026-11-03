@@ -3,17 +3,17 @@ package discovery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
-	"slices"
-	"strings"
 	"time"
 
+	"github.com/brutella/dnssd"
 	"github.com/hashicorp/mdns"
 )
 
 const (
-	SERVICE_NAME string = "_meshok._tcp"
+	SERVICE_TYPE string = "_meshok._tcp"
 	DOMAIN       string = "local."
 	PORT         int    = 52867
 )
@@ -44,10 +44,11 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 }
 
 type Server struct {
-	info    ServerInfo
-	entries chan *mdns.ServiceEntry
-	ann     *mdns.Server
-	logger  *slog.Logger
+	info      ServerInfo
+	logger    *slog.Logger
+	handler   dnssd.ServiceHandle
+	responder dnssd.Responder
+	cancel    context.CancelFunc
 }
 
 func (s *Server) ServerInfo() ServerInfo {
@@ -55,87 +56,83 @@ func (s *Server) ServerInfo() ServerInfo {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	service, err := mdns.NewMDNSService(
-		s.info.Instance,
-		SERVICE_NAME,
-		DOMAIN,
-		s.info.Host+".",
-		PORT,
-		nil, // IPs
-		nil, // TXT
-	)
+	cfg := dnssd.Config{
+		Name: s.info.Instance,
+		Type: SERVICE_TYPE,
+		Host: s.info.Host,
+		Port: PORT,
+	}
+
+	sv, err := dnssd.NewService(cfg)
 	if err != nil {
 		return err
 	}
-	if s.logger == nil {
-		panic("logger is nil")
+
+	// probing for instance name availability for at maximum of 15 seconds
+	// and auto-incrementing the name if there's a conflict.
+	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	sv, err = dnssd.ProbeService(pctx, sv)
+	cancel()
+	if err != nil {
+		return err
 	}
 
-	return s.serve(service, ctx)
+	sctx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
+
+	return s.serve(sctx, sv)
 }
 
-func (s *Server) serve(service *mdns.MDNSService, ctx context.Context) error {
-	ann, err := mdns.NewServer(&mdns.Config{Zone: service})
+func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
+	rp, err := dnssd.NewResponder()
 	if err != nil {
 		return err
 	}
-	s.ann = ann
 
-	ticker := time.NewTicker(3 * time.Second)
+	hdl, err := rp.Add(sv)
+	if err != nil {
+		return err
+	}
+	s.handler = hdl
 
-	params := mdns.DefaultParams(service.Service)
+	add := func(e dnssd.BrowseEntry) {
+		// TODO: save entry into SQLite if it's:
+		// 1. not from loopback
+		// 2. new
+		// or add a new address if the entry is from an already known host
+		fmt.Printf("new entry: %+v\n", e)
+	}
 
-	// this includes advertisements sent by this client
-	rawEntries := make(chan *mdns.ServiceEntry, 4)
-	params.Entries = rawEntries
-	// and this is not
-	s.entries = make(chan *mdns.ServiceEntry, 4)
+	rm := func(e dnssd.BrowseEntry) {
+		// TODO: remove an entry from SQLite if:
+		// 1. it's in the DB
+		// 2. removed address is the last known address for this host
+		// or just only remove the address if there's more
+		fmt.Printf("removed entry: %+v\n", e)
+	}
 
 	go func() {
-		defer close(s.entries)
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-
-			case <-ticker.C:
-				go func() {
-					err = mdns.QueryContext(ctx, params)
-					if err != nil {
-						s.logger.Error("failed to query mDNS entries",
-							"error", err,
-						)
-					}
-				}()
-
-			case entry, ok := <-rawEntries:
-				if !ok {
-					return
-				}
-				// filtering ourself out
-				if isLocalEntry(entry, service) {
-					continue
-				}
-				s.entries <- entry
-			}
+		if err := rp.Respond(ctx); err != nil {
+			s.logger.Error("error while announcing service", "error", err)
 		}
 	}()
+	go func() {
+		svcName := fmt.Sprintf("%s.%s.", sv.Type, sv.Domain)
+		if err := dnssd.LookupType(ctx, svcName, add, rm); err != nil {
+			s.logger.Error("error while looking up the mDNS service", "service type", sv.Type, "error", err)
+		}
+	}()
+
 	return nil
 }
 
 func (s *Server) Stop() error {
-	err := s.ann.Shutdown()
-	return err
+	s.cancel()
+	s.responder.Remove(s.handler)
+	return nil
 }
 
-func (s *Server) Entries() (chan *mdns.ServiceEntry, error) {
-	if s.entries == nil {
-		return nil, errors.New("discovery server is shut down")
-	}
-	return s.entries, nil
-}
-
+// NOTE: do i still need it?
 func isLocalEntry(newEntry *mdns.ServiceEntry, thisService *mdns.MDNSService) bool {
 	// filter out loopbacks
 	if newEntry.AddrV4.IsLoopback() {

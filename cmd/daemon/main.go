@@ -48,8 +48,6 @@ func main() {
 		"advertising port", discovery.PORT,
 	)
 
-	entries, _ := d.Entries()
-	for e := range entries {
-		fmt.Printf("new entry: %+v\n", e)
+	for range ctx.Done() {
 	}
 }
