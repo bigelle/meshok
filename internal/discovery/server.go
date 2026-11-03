@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/brutella/dnssd"
-	"github.com/hashicorp/mdns"
 )
 
 const (
@@ -130,21 +129,4 @@ func (s *Server) Stop() error {
 	s.cancel()
 	s.responder.Remove(s.handler)
 	return nil
-}
-
-// NOTE: do i still need it?
-func isLocalEntry(newEntry *mdns.ServiceEntry, thisService *mdns.MDNSService) bool {
-	// filter out loopbacks
-	if newEntry.AddrV4.IsLoopback() {
-		return true
-	}
-	if newEntry.AddrV6.IsLoopback() {
-		return true
-	}
-
-	// filter out same host
-	if newEntry.Host == thisService.HostName {
-		return true
-	}
-	return false
 }

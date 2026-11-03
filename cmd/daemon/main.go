@@ -49,5 +49,6 @@ func main() {
 	)
 
 	for range ctx.Done() {
+		d.Stop()
 	}
 }
