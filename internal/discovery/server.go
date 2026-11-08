@@ -5,15 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/bigelle/meshok/internal/db"
 	"github.com/brutella/dnssd"
+	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/samber/lo"
 )
 
 const (
 	SERVICE_TYPE string = "_meshok._tcp"
-	DOMAIN       string = "local."
 	PORT         int    = 52867
 )
 
@@ -26,6 +30,7 @@ type ServerConfig struct {
 type ServerInfo struct {
 	Host     string
 	Instance string
+	DeviceID string
 }
 
 func NewServer(cfg *ServerConfig) (*Server, error) {
@@ -37,6 +42,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		info: ServerInfo{
 			Host:     host,
 			Instance: NewInstanceName(),
+			DeviceID: gonanoid.Must(),
 		},
 		logger: cfg.Logger,
 	}, nil
@@ -48,6 +54,7 @@ type Server struct {
 	handler   dnssd.ServiceHandle
 	responder dnssd.Responder
 	cancel    context.CancelFunc
+	db        *db.DeviceDb
 }
 
 func (s *Server) ServerInfo() ServerInfo {
@@ -60,6 +67,9 @@ func (s *Server) Start(ctx context.Context) error {
 		Type: SERVICE_TYPE,
 		Host: s.info.Host,
 		Port: PORT,
+		Text: map[string]string{
+			"id": s.info.DeviceID,
+		},
 	}
 
 	sv, err := dnssd.NewService(cfg)
@@ -67,8 +77,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	// probing for instance name availability for at maximum of 15 seconds
-	// and auto-incrementing the name if there's a conflict.
+	// probing for instance name availability for a maximum of 15 seconds
+	// and auto-incrementing the name if there's a conflict
 	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	sv, err = dnssd.ProbeService(pctx, sv)
 	cancel()
@@ -95,19 +105,41 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	s.handler = hdl
 
 	add := func(e dnssd.BrowseEntry) {
-		// TODO: save entry into SQLite if it's:
-		// 1. not from loopback
-		// 2. new
-		// or add a new address if the entry is from an already known host
-		fmt.Printf("new entry: %+v\n", e)
+		id := e.Text["id"]
+		// skipping
+		if id == s.info.DeviceID {
+			return
+		}
+
+		ips := mapIpsToString(e.IPs)
+
+		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		err := s.db.UpsertDevice(wCtx, db.Device{
+			Id:         id,
+			PseudoName: e.Name,
+			IPs:        ips,
+		})
+		if err != nil {
+			s.logger.Error("failed to create or update device", "error", err)
+		}
 	}
 
 	rm := func(e dnssd.BrowseEntry) {
-		// TODO: remove an entry from SQLite if:
-		// 1. it's in the DB
-		// 2. removed address is the last known address for this host
-		// or just only remove the address if there's more
-		fmt.Printf("removed entry: %+v\n", e)
+		id := e.Text["id"]
+		// skipping
+		if id == s.info.DeviceID {
+			return
+		}
+
+		ips := mapIpsToString(e.IPs)
+
+		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		err := s.db.RemoveDeviceAddresses(wCtx, id, ips...)
+		if err != nil {
+			s.logger.Error("failed to remove device address", "error", err)
+		}
 	}
 
 	go func() {
@@ -129,4 +161,21 @@ func (s *Server) Stop() error {
 	s.cancel()
 	s.responder.Remove(s.handler)
 	return nil
+}
+
+func mapIpsToString(ips []net.IP) []string {
+	raw := lo.Map(ips, func(x net.IP, _ int) string {
+		return x.String()
+	})
+	return lo.Filter(raw, func(x string, _ int) bool {
+		// empty addresses
+		if x == "<nil>" {
+			return false
+		}
+		// malformed addresses
+		if strings.HasPrefix(x, "?") {
+			return false
+		}
+		return true
+	})
 }
