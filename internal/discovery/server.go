@@ -53,7 +53,6 @@ type Server struct {
 	logger    *slog.Logger
 	handler   dnssd.ServiceHandle
 	responder dnssd.Responder
-	cancel    context.CancelFunc
 	db        *db.DeviceDb
 }
 
@@ -86,10 +85,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	sctx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
-
-	return s.serve(sctx, sv)
+	return s.serve(ctx, sv)
 }
 
 func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
@@ -104,44 +100,6 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	}
 	s.handler = hdl
 
-	add := func(e dnssd.BrowseEntry) {
-		id := e.Text["id"]
-		// skipping
-		if id == s.info.DeviceID {
-			return
-		}
-
-		ips := mapIpsToString(e.IPs)
-
-		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		err := s.db.UpsertDevice(wCtx, db.Device{
-			Id:         id,
-			PseudoName: e.Name,
-			IPs:        ips,
-		})
-		if err != nil {
-			s.logger.Error("failed to create or update device", "error", err)
-		}
-	}
-
-	rm := func(e dnssd.BrowseEntry) {
-		id := e.Text["id"]
-		// skipping
-		if id == s.info.DeviceID {
-			return
-		}
-
-		ips := mapIpsToString(e.IPs)
-
-		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		err := s.db.RemoveDeviceAddresses(wCtx, id, ips...)
-		if err != nil {
-			s.logger.Error("failed to remove device address", "error", err)
-		}
-	}
-
 	go func() {
 		if err := rp.Respond(ctx); err != nil {
 			s.logger.Error("error while announcing service", "error", err)
@@ -149,7 +107,7 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	}()
 	go func() {
 		svcName := fmt.Sprintf("%s.%s.", sv.Type, sv.Domain)
-		if err := dnssd.LookupType(ctx, svcName, add, rm); err != nil {
+		if err := dnssd.LookupType(ctx, svcName, s.add(ctx), s.remove(ctx)); err != nil {
 			s.logger.Error("error while looking up the mDNS service", "service type", sv.Type, "error", err)
 		}
 	}()
@@ -157,8 +115,53 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	return nil
 }
 
+func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
+	return func(be dnssd.BrowseEntry) {
+		id := be.Text["id"]
+		// skipping
+		if id == s.info.DeviceID {
+			return
+		}
+
+		ips := mapIpsToString(be.IPs)
+
+		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		err := s.db.UpsertDevice(wCtx, db.Device{
+			Id:         id,
+			PseudoName: be.Name,
+			IPs:        ips,
+		})
+		if err != nil {
+			s.logger.Error("failed to create or update device", "error", err)
+		}
+	}
+}
+
+func (s *Server) remove(ctx context.Context) func(dnssd.BrowseEntry) {
+	return func(be dnssd.BrowseEntry) {
+		id := be.Text["id"]
+		// skipping
+		if id == s.info.DeviceID {
+			return
+		}
+
+		ips := mapIpsToString(be.IPs)
+
+		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		err := s.db.UpsertDevice(wCtx, db.Device{
+			Id:         id,
+			PseudoName: be.Name,
+			IPs:        ips,
+		})
+		if err != nil {
+			s.logger.Error("failed to create or update device", "error", err)
+		}
+	}
+}
+
 func (s *Server) Stop() error {
-	s.cancel()
 	s.responder.Remove(s.handler)
 	return nil
 }
