@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	database "github.com/bigelle/meshok/internal/db"
 	"github.com/bigelle/meshok/internal/discovery"
 	"github.com/bigelle/meshok/internal/logger"
 	"go.uber.org/zap"
@@ -26,8 +27,16 @@ func main() {
 		"signals", []string{"Interrupt", "SIGTERM"},
 	)
 
+	db, err := database.SetupDB()
+	if err != nil {
+		logger.Error("failed to initiate database connection", "error", err)
+		os.Exit(1)
+	}
+	deviceDb := database.NewDeviceDb(db, logger)
+
 	d, err := discovery.NewServer(&discovery.ServerConfig{
 		Logger: logger,
+		Db:     &deviceDb,
 	})
 	if err != nil {
 		logger.Error("failed to create discovery service", "error", err)
@@ -48,7 +57,6 @@ func main() {
 		"advertising port", discovery.PORT,
 	)
 
-	for range ctx.Done() {
-		d.Stop()
-	}
+	<-ctx.Done()
+	d.Stop()
 }

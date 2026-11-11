@@ -12,7 +12,6 @@ import (
 
 	"github.com/bigelle/meshok/internal/db"
 	"github.com/brutella/dnssd"
-	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/samber/lo"
 )
 
@@ -24,7 +23,9 @@ const (
 type ServerConfig struct {
 	DeviceID  string // currently no use
 	NetworkID string // currently no use
-	Logger    *slog.Logger
+
+	Logger *slog.Logger
+	Db     *db.DeviceDb
 }
 
 type ServerInfo struct {
@@ -43,7 +44,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 			Host:     host,
 			Instance: NewInstanceName(),
 			// TODO: read from config, generate if none
-			DeviceID: gonanoid.Must(),
+			DeviceID: cfg.DeviceID,
 		},
 		logger: cfg.Logger,
 	}, nil
@@ -96,6 +97,7 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	if err != nil {
 		return err
 	}
+	s.responder = rp
 
 	hdl, err := rp.Add(sv)
 	if err != nil {
@@ -111,6 +113,9 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 	go func() {
 		svcName := fmt.Sprintf("%s.%s.", sv.Type, sv.Domain)
 		if err := dnssd.LookupType(ctx, svcName, s.add(ctx), s.remove(ctx)); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			s.logger.Error("error while looking up the mDNS service", "service type", sv.Type, "error", err)
 		}
 	}()
@@ -161,6 +166,7 @@ func (s *Server) remove(ctx context.Context) func(dnssd.BrowseEntry) {
 }
 
 func (s *Server) Stop() error {
+	s.logger.Info("stopping discovery server")
 	s.responder.Remove(s.handler)
 	return nil
 }
