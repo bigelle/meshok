@@ -34,7 +34,7 @@ func main() {
 	}
 	deviceDb := database.NewDeviceDb(db, logger)
 
-	d, err := discovery.NewServer(&discovery.ServerConfig{
+	d, err := discovery.NewServer(&discovery.Config{
 		Logger: logger,
 		Db:     &deviceDb,
 	})

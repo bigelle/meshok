@@ -11,14 +11,12 @@ import (
 )
 
 type DeviceDb struct {
-	db     *gorm.DB
-	logger *slog.Logger
+	db *gorm.DB
 }
 
 func NewDeviceDb(db *gorm.DB, l *slog.Logger) DeviceDb {
 	return DeviceDb{
-		db:     db,
-		logger: l,
+		db: db,
 	}
 }
 
@@ -81,9 +79,6 @@ func (db *DeviceDb) GetDeviceById(ctx context.Context, id string) (*Device, erro
 
 func (db *DeviceDb) RemoveDeviceAddresses(ctx context.Context, id string, addr ...string) error {
 	if addr == nil {
-		// i mean it's bad that i'm somehow passing nil to this method,
-		// but it's not dangerous? could be a bug so I'm just warning
-		db.logger.Warn("trying to use nil value when removing device addresses")
 		return nil
 	}
 

@@ -20,7 +20,7 @@ const (
 	PORT         int    = 52867
 )
 
-type ServerConfig struct {
+type Config struct {
 	DeviceID  string // currently no use
 	NetworkID string // currently no use
 
@@ -34,7 +34,7 @@ type ServerInfo struct {
 	DeviceID string
 }
 
-func NewServer(cfg *ServerConfig) (*Server, error) {
+func NewServer(cfg *Config) (*Server, error) {
 	host, err := os.Hostname()
 	if err != nil {
 		return nil, errors.New("can not resolve system's host name")
@@ -55,7 +55,7 @@ type Server struct {
 	logger    *slog.Logger
 	handler   dnssd.ServiceHandle
 	responder dnssd.Responder
-	db        *db.DeviceDb
+	db        DeviceStore
 }
 
 func (s *Server) ServerInfo() ServerInfo {
