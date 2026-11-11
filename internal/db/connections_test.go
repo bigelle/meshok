@@ -27,7 +27,7 @@ func TestConnectionsDb(t *testing.T) {
 			"192.168.1.1",
 			"fe80::200:5aee:feaa:20a2",
 		},
-		PseudoName: "SomePseudoName",
+		InstanceName: "SomePseudoName",
 	}
 	t.Run("create device", func(t *testing.T) {
 		err = db.UpsertDevice(t.Context(), d)
@@ -60,13 +60,16 @@ func TestConnectionsDb(t *testing.T) {
 		assert.Equal(t, datatypes.JSONSlice[string]{"fe80::200:5aee:feaa:20a2"}, res.IPs)
 	})
 
-	t.Run("upsert device with multiple new addresses", func(t *testing.T) {
+	t.Run("upsert device with multiple new addresses and a new instance name", func(t *testing.T) {
 		d.IPs = append(d.IPs, "10.10.0.100", "192.168.2.3")
+		d.InstanceName = "SomeNewInstanceName"
 		err = db.UpsertDevice(t.Context(), d)
 		require.NoError(t, err)
 
 		res, err := db.GetDeviceById(t.Context(), "SomeAsciiId")
 		require.NoError(t, err)
+
+		assert.Equal(t, d.InstanceName, res.InstanceName)
 
 		expect := datatypes.JSONSlice[string]{"fe80::200:5aee:feaa:20a2", "192.168.1.1", "10.10.0.100", "192.168.2.3"}
 		got := res.IPs

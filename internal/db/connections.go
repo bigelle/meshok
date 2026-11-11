@@ -25,7 +25,9 @@ func NewDeviceDb(db *gorm.DB, l *slog.Logger) DeviceDb {
 type Device struct {
 	// random generated string
 	Id string `gorm:"primaryKey"`
-	// random generated instance name or user-defined pseudoname
+	// instance name
+	InstanceName string `gorm:"column:instance_name"`
+	// user defined pseudoname, if empty use InstanceName instead
 	PseudoName string `gorm:"column:pseudo_name"`
 	// list of device's ip addresses
 	IPs datatypes.JSONSlice[string] `gorm:"column:ips;type:text;not null;default:'[]'"`
@@ -44,6 +46,15 @@ func (db *DeviceDb) UpsertDevice(ctx context.Context, d Device) error {
 			return err
 		}
 
+		// If a remove client was restarted with a new instance name,
+		// update it locally
+		if d.InstanceName != "" && d.InstanceName != existing.InstanceName {
+			if err := tx.Model(&existing).Update("instance_name", d.InstanceName).Error; err != nil {
+				return err
+			}
+		}
+
+		// add fresh IP addresses
 		merged := slices.Concat(existing.IPs, d.IPs)
 		slices.Sort(merged)
 		merged = slices.Compact(merged)

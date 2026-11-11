@@ -131,9 +131,9 @@ func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
 		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		err := s.db.UpsertDevice(wCtx, db.Device{
-			Id:         id,
-			PseudoName: be.Name,
-			IPs:        ips,
+			Id:           id,
+			InstanceName: be.Name,
+			IPs:          ips,
 		})
 		if err != nil {
 			s.logger.Error("failed to create or update device", "error", err)
