@@ -25,7 +25,7 @@ type ServerConfig struct {
 	NetworkID string // currently no use
 
 	Logger *slog.Logger
-	Db     *db.DeviceDb
+	Db     DeviceStore
 }
 
 type ServerInfo struct {
@@ -186,4 +186,9 @@ func mapIpsToString(ips []net.IP) []string {
 		}
 		return true
 	})
+}
+
+type DeviceStore interface {
+	UpsertDevice(ctx context.Context, d db.Device) error
+	RemoveDeviceAddresses(ctx context.Context, id string, addr ...string) error
 }
