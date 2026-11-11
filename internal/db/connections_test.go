@@ -5,16 +5,15 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/bigelle/meshok/internal/db"
 	database "github.com/bigelle/meshok/internal/db"
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 )
 
 func TestConnectionsDb(t *testing.T) {
-	g, err := gorm.Open(sqlite.Open(":memory:"))
+	g, err := db.SetupDB(t.TempDir())
 	require.NoError(t, err)
 	err = g.AutoMigrate(&database.Device{})
 	require.NoError(t, err)

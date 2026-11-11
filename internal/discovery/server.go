@@ -42,6 +42,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		info: ServerInfo{
 			Host:     host,
 			Instance: NewInstanceName(),
+			// TODO: read from config, generate if none
 			DeviceID: gonanoid.Must(),
 		},
 		logger: cfg.Logger,
@@ -84,6 +85,8 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// in case ProbeService incremeneted instance name
+	s.info.Instance = sv.Name
 
 	return s.serve(ctx, sv)
 }
