@@ -1,12 +1,11 @@
 package database_test
 
 import (
-	"log/slog"
 	"slices"
 	"testing"
 
-	database1 "github.com/bigelle/meshok/internal/database"
 	database "github.com/bigelle/meshok/internal/database"
+	database1 "github.com/bigelle/meshok/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -18,7 +17,7 @@ func TestConnectionsDb(t *testing.T) {
 	err = g.AutoMigrate(&database.Device{})
 	require.NoError(t, err)
 
-	db := database.NewDeviceStore(g, slog.New(slog.DiscardHandler))
+	db := database.NewDeviceStore(g)
 	require.NotNil(t, db)
 
 	d := database.Device{

@@ -7,12 +7,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/bigelle/meshok/internal/database"
 	"github.com/brutella/dnssd"
-	"github.com/samber/lo"
 )
 
 const (
@@ -185,20 +183,13 @@ func (s *Server) Stop() error {
 }
 
 func mapIpsToString(ips []net.IP) []string {
-	raw := lo.Map(ips, func(x net.IP, _ int) string {
-		return x.String()
-	})
-	return lo.Filter(raw, func(x string, _ int) bool {
-		// empty addresses
-		if x == "<nil>" {
-			return false
+	var strs []string
+	for _, ip := range ips {
+		if ip.To16() != nil {
+			strs = append(strs, ip.String())
 		}
-		// malformed addresses
-		if strings.HasPrefix(x, "?") {
-			return false
-		}
-		return true
-	})
+	}
+	return strs
 }
 
 type DeviceStore interface {
