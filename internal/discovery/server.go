@@ -24,8 +24,8 @@ type Config struct {
 	DeviceID  string // currently no use
 	NetworkID string // currently no use
 
-	Logger *slog.Logger
-	Db     DeviceStore
+	Logger      *slog.Logger
+	DeviceStore DeviceStore
 }
 
 type ServerInfo struct {
@@ -34,19 +34,32 @@ type ServerInfo struct {
 	DeviceID string
 }
 
-func NewServer(cfg *Config) (*Server, error) {
+func NewServer(cfg Config) (*Server, error) {
+	if cfg.DeviceID == "" {
+		return nil, errors.New("device id is empty")
+	}
+	// TODO: check for network id if i ever use it
+
+	if cfg.DeviceStore == nil {
+		return nil, errors.New("device storage is nil")
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+
 	host, err := os.Hostname()
 	if err != nil {
-		return nil, errors.New("can not resolve system's host name")
+		return nil, fmt.Errorf("failed to retriev OS hostname: %w", err)
 	}
+
 	return &Server{
 		info: ServerInfo{
 			Host:     host,
 			Instance: NewInstanceName(),
-			// TODO: read from config, generate if none
 			DeviceID: cfg.DeviceID,
 		},
 		logger: cfg.Logger,
+		store:  cfg.DeviceStore,
 	}, nil
 }
 
@@ -55,7 +68,7 @@ type Server struct {
 	logger    *slog.Logger
 	handler   dnssd.ServiceHandle
 	responder dnssd.Responder
-	db        DeviceStore
+	store     DeviceStore
 }
 
 func (s *Server) ServerInfo() ServerInfo {
@@ -135,7 +148,7 @@ func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
 
 		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		err := s.db.UpsertDevice(wCtx, db.Device{
+		err := s.store.UpsertDevice(wCtx, db.Device{
 			Id:           id,
 			InstanceName: be.Name,
 			IPs:          ips,
@@ -158,7 +171,7 @@ func (s *Server) remove(ctx context.Context) func(dnssd.BrowseEntry) {
 
 		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		err := s.db.RemoveDeviceAddresses(wCtx, id, ips...)
+		err := s.store.RemoveDeviceAddresses(wCtx, id, ips...)
 		if err != nil {
 			s.logger.Error("failed to create or update device", "error", err)
 		}

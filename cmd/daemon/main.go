@@ -34,9 +34,9 @@ func main() {
 	}
 	deviceDb := database.NewDeviceDb(db, logger)
 
-	d, err := discovery.NewServer(&discovery.Config{
-		Logger: logger,
-		Db:     &deviceDb,
+	d, err := discovery.NewServer(discovery.Config{
+		Logger:      logger,
+		DeviceStore: &deviceDb,
 	})
 	if err != nil {
 		logger.Error("failed to create discovery service", "error", err)
