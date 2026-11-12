@@ -7,10 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	database "github.com/bigelle/meshok/internal/database"
+	"github.com/bigelle/meshok/internal/database"
 	"github.com/bigelle/meshok/internal/discovery"
 	"github.com/bigelle/meshok/internal/logger"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -35,6 +37,7 @@ func main() {
 	deviceStore := database.NewDeviceStore(db)
 
 	d, err := discovery.NewServer(discovery.Config{
+		DeviceID:    gonanoid.Must(),
 		Logger:      logger,
 		DeviceStore: &deviceStore,
 	})
@@ -49,14 +52,11 @@ func main() {
 		"instance name", info.Instance,
 	)
 
-	if err := d.Start(ctx); err != nil {
-		logger.Error("failed to start discovery server", "error", err)
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error { return d.Run(ctx) })
+
+	if err := group.Wait(); err != nil {
+		logger.Error("error from discovery server", "error", err)
 		os.Exit(1)
 	}
-	logger.Debug("mDNS server is online",
-		"advertising port", discovery.PORT,
-	)
-
-	<-ctx.Done()
-	d.Stop()
 }

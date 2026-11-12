@@ -137,7 +137,11 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
 	return func(be dnssd.BrowseEntry) {
 		id := be.Text["id"]
-		// skipping
+		// the first sighting is a probe query without TXT records
+		if id == "" {
+			return
+		}
+		// skipping if entry came from this client
 		if id == s.info.DeviceID {
 			return
 		}
@@ -160,6 +164,10 @@ func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
 func (s *Server) remove(ctx context.Context) func(dnssd.BrowseEntry) {
 	return func(be dnssd.BrowseEntry) {
 		id := be.Text["id"]
+		// an entry without an ID was never stored
+		if id == "" {
+			return
+		}
 		// skipping
 		if id == s.info.DeviceID {
 			return
@@ -171,14 +179,23 @@ func (s *Server) remove(ctx context.Context) func(dnssd.BrowseEntry) {
 		defer cancel()
 		err := s.store.RemoveDeviceAddresses(wCtx, id, ips...)
 		if err != nil {
-			s.logger.Error("failed to create or update device", "error", err)
+			s.logger.Error("failed to remove IP address", "error", err)
 		}
 	}
 }
 
-func (s *Server) Stop() error {
+func (s *Server) Stop() {
 	s.logger.Info("stopping discovery server")
 	s.responder.Remove(s.handler)
+}
+
+func (s *Server) Run(ctx context.Context) error {
+	if err := s.Start(ctx); err != nil {
+		return err
+	}
+
+	<-ctx.Done()
+	s.Stop()
 	return nil
 }
 

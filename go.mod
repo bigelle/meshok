@@ -7,9 +7,11 @@ require (
 	github.com/brutella/dnssd v1.2.14
 	github.com/dustinkirkland/golang-petname v0.0.0-20261016130456-fdd95a3d0543
 	github.com/glebarez/sqlite v1.11.0
+	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/zap v1.28.0
 	go.uber.org/zap/exp v0.3.0
+	golang.org/x/sync v0.25.0
 	golang.org/x/text v0.43.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/datatypes v1.2.7
@@ -40,3 +42,5 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.61.1 // indirect
 )
+
+replace github.com/brutella/dnssd => ../../forks/dnssd

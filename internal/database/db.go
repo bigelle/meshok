@@ -33,6 +33,7 @@ func SetupDB(path ...string) (*gorm.DB, error) {
 	}
 
 	// TODO: run migrations here
+	g.AutoMigrate(&Device{})
 
 	return g, nil
 }
