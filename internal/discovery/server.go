@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bigelle/meshok/internal/db"
+	"github.com/bigelle/meshok/internal/database"
 	"github.com/brutella/dnssd"
 	"github.com/samber/lo"
 )
@@ -148,7 +148,7 @@ func (s *Server) add(ctx context.Context) func(dnssd.BrowseEntry) {
 
 		wCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		err := s.store.UpsertDevice(wCtx, db.Device{
+		err := s.store.UpsertDevice(wCtx, database.Device{
 			Id:           id,
 			InstanceName: be.Name,
 			IPs:          ips,
@@ -202,6 +202,6 @@ func mapIpsToString(ips []net.IP) []string {
 }
 
 type DeviceStore interface {
-	UpsertDevice(ctx context.Context, d db.Device) error
+	UpsertDevice(ctx context.Context, d database.Device) error
 	RemoveDeviceAddresses(ctx context.Context, id string, addr ...string) error
 }

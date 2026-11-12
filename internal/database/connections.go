@@ -1,9 +1,8 @@
-package db
+package database
 
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"slices"
 
 	"gorm.io/datatypes"
@@ -14,7 +13,7 @@ type DeviceDb struct {
 	db *gorm.DB
 }
 
-func NewDeviceDb(db *gorm.DB, l *slog.Logger) DeviceDb {
+func NewDeviceStore(db *gorm.DB) DeviceDb {
 	return DeviceDb{
 		db: db,
 	}
