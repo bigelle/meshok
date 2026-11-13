@@ -32,6 +32,10 @@ type Device struct {
 	//TODO: add auth-related keys (secrets? trust flags?)
 }
 
+func (Device) TableName() string {
+	return "found_devices"
+}
+
 func (db *DeviceDb) UpsertDevice(ctx context.Context, d Device) error {
 	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing Device

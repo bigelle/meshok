@@ -32,8 +32,13 @@ func SetupDB(path ...string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// TODO: run migrations here
-	g.AutoMigrate(&Device{})
+	err = g.AutoMigrate(
+		&Device{},
+		&Setting{},
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	return g, nil
 }

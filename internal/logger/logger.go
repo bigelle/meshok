@@ -51,5 +51,6 @@ func New(level zap.AtomicLevel) (log *slog.Logger, closure func(), err error) {
 	zl := zap.New(core)
 
 	log = slog.New(zapslog.NewHandler(core))
+	slog.SetDefault(log)
 	return log, func() { zl.Sync(); logfile.Close() }, nil
 }
