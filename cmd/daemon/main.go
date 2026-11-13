@@ -37,6 +37,7 @@ func main() {
 	deviceStore := database.NewDeviceStore(db)
 
 	d, err := discovery.NewServer(discovery.Config{
+		// FIXME: read it from config
 		DeviceID:    gonanoid.Must(),
 		Logger:      logger,
 		DeviceStore: &deviceStore,

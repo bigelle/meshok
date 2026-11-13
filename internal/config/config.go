@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bigelle/meshok/internal/database"
+	"github.com/bigelle/meshok/internal/identity"
 )
 
 type Config struct {
@@ -60,8 +61,7 @@ func (l *ConfigLoader) LoadConfig(ctx context.Context) (*Config, error) {
 		switch setting.Key {
 		case "device_id":
 			if setting.Value == "" {
-				// FIXME: generate ID
-				setting.Value = "aabbcc"
+				setting.Value = identity.GenerateRandomDeviceId()
 				wctx, wcancel := context.WithTimeout(ctx, 1*time.Second)
 				defer wcancel()
 
