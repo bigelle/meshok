@@ -118,6 +118,9 @@ func (s *Server) serve(ctx context.Context, sv dnssd.Service) error {
 
 	go func() {
 		if err := rp.Respond(ctx); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			s.logger.Error("error while announcing service", "error", err)
 		}
 	}()

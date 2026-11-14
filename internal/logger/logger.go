@@ -41,8 +41,13 @@ func New(level zap.AtomicLevel) (log *slog.Logger, closure func(), err error) {
 		zapcore.AddSync(logfile),
 		level,
 	)
+
+	consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
+	// is this the right way to disable timestamp logging?
+	// anyway this job should be delegated to journald or whatever
+	consoleEncoderConfig.TimeKey = ""
 	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
+		zapcore.NewConsoleEncoder(consoleEncoderConfig),
 		zapcore.Lock(os.Stderr),
 		level,
 	)

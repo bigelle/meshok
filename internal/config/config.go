@@ -45,10 +45,7 @@ type ConfigStore interface {
 }
 
 func (l *ConfigLoader) LoadConfig(ctx context.Context) (*Config, error) {
-	rctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-	defer cancel()
-
-	settings, err := l.store.LoadAllSettings(rctx)
+	settings, err := l.store.LoadAllSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +70,20 @@ func (l *ConfigLoader) LoadConfig(ctx context.Context) (*Config, error) {
 		default:
 			l.logger.Warn("unknown config key", "key", setting.Key)
 		}
+	}
+
+	// check if the keys were even there:
+	if cfg.DeviceId == "" {
+		wctx, wcancel := context.WithTimeout(ctx, 1*time.Second)
+		defer wcancel()
+		id := identity.GenerateRandomDeviceId()
+		if err := l.store.StoreSetting(wctx, database.Setting{
+			Key:   "device_id",
+			Value: id,
+		}); err != nil {
+			return nil, err
+		}
+		cfg.DeviceId = id
 	}
 
 	return &cfg, nil

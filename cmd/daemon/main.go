@@ -6,16 +6,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/bigelle/meshok/internal/config"
 	"github.com/bigelle/meshok/internal/database"
 	"github.com/bigelle/meshok/internal/discovery"
 	"github.com/bigelle/meshok/internal/logger"
-	gonanoid "github.com/matoous/go-nanoid/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 func main() {
+	// FIXME: read log level from env or flags
 	logger, closure, err := logger.New(zap.NewAtomicLevelAt(zap.DebugLevel))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to set up logger: %s", err.Error())
@@ -34,11 +36,28 @@ func main() {
 		logger.Error("failed to initiate database connection", "error", err)
 		os.Exit(1)
 	}
-	deviceStore := database.NewDeviceStore(db)
 
+	cfgStore := database.NewSettingsStore(db)
+	cfgLoader, err := config.NewConfigLoader(config.LoaderParams{
+		Logger: logger,
+		Store:  cfgStore,
+	})
+	if err != nil {
+		logger.Error("failed to initiate config loader", "error", err)
+		os.Exit(1)
+	}
+
+	rctx, rcancel := context.WithTimeout(ctx, 1*time.Second)
+	defer rcancel()
+	cfg, err := cfgLoader.LoadConfig(rctx)
+	if err != nil {
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	deviceStore := database.NewDeviceStore(db)
 	d, err := discovery.NewServer(discovery.Config{
-		// FIXME: read it from config
-		DeviceID:    gonanoid.Must(),
+		DeviceID:    cfg.DeviceId,
 		Logger:      logger,
 		DeviceStore: &deviceStore,
 	})
