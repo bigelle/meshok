@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bigelle/meshok/internal/config"
 	"github.com/bigelle/meshok/internal/database"
 	"github.com/bigelle/meshok/internal/discovery"
 	"github.com/bigelle/meshok/internal/logger"
+	"github.com/bigelle/meshok/internal/state"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -27,9 +27,9 @@ func main() {
 
 	db := setupDb(log)
 
-	cfg := loadConfig(ctx, db, log)
+	state := loadAppState(ctx, db, log)
 
-	d := setupDiscovery(db, cfg, log)
+	d := setupDiscovery(db, state.DeviceId, log)
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return d.Run(ctx) })
@@ -67,10 +67,10 @@ func setupDb(log *slog.Logger) *gorm.DB {
 	return db
 }
 
-func setupDiscovery(db *gorm.DB, cfg *config.Config, log *slog.Logger) *discovery.Server {
+func setupDiscovery(db *gorm.DB, deviceId string, log *slog.Logger) *discovery.Server {
 	deviceStore := database.NewDeviceStore(db)
 	d, err := discovery.NewServer(discovery.Config{
-		DeviceID:    cfg.DeviceId,
+		DeviceID:    deviceId,
 		Logger:      log,
 		DeviceStore: &deviceStore,
 	})
@@ -88,9 +88,9 @@ func setupDiscovery(db *gorm.DB, cfg *config.Config, log *slog.Logger) *discover
 	return d
 }
 
-func loadConfig(ctx context.Context, db *gorm.DB, log *slog.Logger) *config.Config {
+func loadAppState(ctx context.Context, db *gorm.DB, log *slog.Logger) *state.State {
 	store := database.NewSettingsStore(db)
-	loader, err := config.NewConfigLoader(config.LoaderParams{
+	loader, err := state.NewStateLoader(state.LoaderParams{
 		Logger: log,
 		Store:  store,
 	})
@@ -102,7 +102,7 @@ func loadConfig(ctx context.Context, db *gorm.DB, log *slog.Logger) *config.Conf
 	rctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
-	cfg, err := loader.LoadConfig(rctx)
+	cfg, err := loader.LoadState(rctx)
 	if err != nil {
 		log.Error("failed to load config", "error", err)
 		os.Exit(1)

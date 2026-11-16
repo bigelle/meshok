@@ -34,7 +34,7 @@ func SetupDB(path ...string) (*gorm.DB, error) {
 
 	err = g.AutoMigrate(
 		&Device{},
-		&Setting{},
+		&StateValue{},
 	)
 	if err != nil {
 		return nil, err

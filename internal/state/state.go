@@ -1,4 +1,4 @@
-package config
+package state
 
 import (
 	"context"
@@ -10,16 +10,16 @@ import (
 	"github.com/bigelle/meshok/internal/identity"
 )
 
-type Config struct {
+type State struct {
 	DeviceId string
 }
 
-type ConfigLoader struct {
-	store  ConfigStore
+type StateLoader struct {
+	store  StateStore
 	logger *slog.Logger
 }
 
-func NewConfigLoader(params LoaderParams) (*ConfigLoader, error) {
+func NewStateLoader(params LoaderParams) (*StateLoader, error) {
 	if params.Store == nil {
 		return nil, errors.New("config store is nil")
 	}
@@ -27,30 +27,29 @@ func NewConfigLoader(params LoaderParams) (*ConfigLoader, error) {
 		params.Logger = slog.Default()
 	}
 
-	return &ConfigLoader{
+	return &StateLoader{
 		store:  params.Store,
 		logger: params.Logger,
 	}, nil
 }
 
-// oh for fucks sake at least it's not ConfigLoaderConfig
 type LoaderParams struct {
-	Store  ConfigStore
+	Store  StateStore
 	Logger *slog.Logger
 }
 
-type ConfigStore interface {
-	LoadAllSettings(context.Context) ([]database.Setting, error)
-	StoreSetting(context.Context, database.Setting) error
+type StateStore interface {
+	GetAllStateValues(context.Context) ([]database.StateValue, error)
+	StoreStateValue(context.Context, database.StateValue) error
 }
 
-func (l *ConfigLoader) LoadConfig(ctx context.Context) (*Config, error) {
-	settings, err := l.store.LoadAllSettings(ctx)
+func (l *StateLoader) LoadState(ctx context.Context) (*State, error) {
+	settings, err := l.store.GetAllStateValues(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg Config
+	var st State
 	// 1. if value is required but no fallback - err
 	// 2. if value is required but there's a fallback - apply and store it
 	// 3. if value is not required - skip
@@ -62,29 +61,29 @@ func (l *ConfigLoader) LoadConfig(ctx context.Context) (*Config, error) {
 				wctx, wcancel := context.WithTimeout(ctx, 1*time.Second)
 				defer wcancel()
 
-				if err := l.store.StoreSetting(wctx, setting); err != nil {
+				if err := l.store.StoreStateValue(wctx, setting); err != nil {
 					return nil, err
 				}
 			}
-			cfg.DeviceId = setting.Value
+			st.DeviceId = setting.Value
 		default:
-			l.logger.Warn("unknown config key", "key", setting.Key)
+			l.logger.Warn("unknown state field", "key", setting.Key)
 		}
 	}
 
 	// check if the keys were even there:
-	if cfg.DeviceId == "" {
+	if st.DeviceId == "" {
 		wctx, wcancel := context.WithTimeout(ctx, 1*time.Second)
 		defer wcancel()
 		id := identity.GenerateRandomDeviceId()
-		if err := l.store.StoreSetting(wctx, database.Setting{
+		if err := l.store.StoreStateValue(wctx, database.StateValue{
 			Key:   "device_id",
 			Value: id,
 		}); err != nil {
 			return nil, err
 		}
-		cfg.DeviceId = id
+		st.DeviceId = id
 	}
 
-	return &cfg, nil
+	return &st, nil
 }
