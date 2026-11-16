@@ -9,17 +9,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bigelle/meshok/internal/config"
 	"github.com/bigelle/meshok/internal/database"
 	"github.com/bigelle/meshok/internal/discovery"
 	"github.com/bigelle/meshok/internal/logger"
 	"github.com/bigelle/meshok/internal/state"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
 func main() {
-	log, closeLog := setupLogger()
+	cfg := loadConfig()
+
+	log, closeLog := setupLogger(cfg)
 	defer closeLog()
 
 	ctx, stop := setupSignals(log)
@@ -40,9 +42,22 @@ func main() {
 	}
 }
 
-func setupLogger() (log *slog.Logger, closure func()) {
+func loadConfig() *config.Config {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		// FIXME: It shouldn't be as important
+		// so I need to throw a warning and fallback to defaults instead
+		// but for now I can't just remove the os.Exit()
+		// so I leave it there
+		fmt.Fprintf(os.Stderr, "failed to load config: %s", err.Error())
+		os.Exit(1)
+	}
+	return cfg
+}
+
+func setupLogger(cfg *config.Config) (log *slog.Logger, closure func()) {
 	// FIXME: read log level from env or flags
-	log, closure, err := logger.New(zap.NewAtomicLevelAt(zap.DebugLevel))
+	log, closure, err := logger.New(cfg.LogLevel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to set up logger: %s", err.Error())
 		os.Exit(1)
@@ -51,11 +66,7 @@ func setupLogger() (log *slog.Logger, closure func()) {
 }
 
 func setupSignals(log *slog.Logger) (context.Context, context.CancelFunc) {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	log.Debug("listening for OS signals",
-		"signals", []string{"Interrupt", "SIGTERM"},
-	)
-	return ctx, stop
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }
 
 func setupDb(log *slog.Logger) *gorm.DB {
@@ -64,28 +75,8 @@ func setupDb(log *slog.Logger) *gorm.DB {
 		log.Error("failed to initiate database connection", "error", err)
 		os.Exit(1)
 	}
+	log.Info("successfully opened sqlite database")
 	return db
-}
-
-func setupDiscovery(db *gorm.DB, deviceId string, log *slog.Logger) *discovery.Server {
-	deviceStore := database.NewDeviceStore(db)
-	d, err := discovery.NewServer(discovery.Config{
-		DeviceID:    deviceId,
-		Logger:      log,
-		DeviceStore: &deviceStore,
-	})
-	if err != nil {
-		log.Error("failed to create discovery service", "error", err)
-		os.Exit(1)
-	}
-
-	info := d.ServerInfo()
-	log.Debug("created mDNS server",
-		"hostname", info.Host,
-		"instance name", info.Instance,
-	)
-
-	return d
 }
 
 func loadAppState(ctx context.Context, db *gorm.DB, log *slog.Logger) *state.State {
@@ -107,5 +98,27 @@ func loadAppState(ctx context.Context, db *gorm.DB, log *slog.Logger) *state.Sta
 		log.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	log.Info("successfully loaded app state from sqlite")
 	return cfg
+}
+
+func setupDiscovery(db *gorm.DB, deviceId string, log *slog.Logger) *discovery.Server {
+	deviceStore := database.NewDeviceStore(db)
+	d, err := discovery.NewServer(discovery.Config{
+		DeviceID:    deviceId,
+		Logger:      log,
+		DeviceStore: &deviceStore,
+	})
+	if err != nil {
+		log.Error("failed to create discovery service", "error", err)
+		os.Exit(1)
+	}
+
+	info := d.ServerInfo()
+	log.Info("started mDNS service",
+		"instance name", info.Instance,
+		"advertising port", discovery.PORT,
+	)
+
+	return d
 }

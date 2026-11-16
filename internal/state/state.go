@@ -44,7 +44,7 @@ type StateStore interface {
 }
 
 func (l *StateLoader) LoadState(ctx context.Context) (*State, error) {
-	settings, err := l.store.GetAllStateValues(ctx)
+	state, err := l.store.GetAllStateValues(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (l *StateLoader) LoadState(ctx context.Context) (*State, error) {
 	// 1. if value is required but no fallback - err
 	// 2. if value is required but there's a fallback - apply and store it
 	// 3. if value is not required - skip
-	for _, setting := range settings {
+	for _, setting := range state {
 		switch setting.Key {
 		case "device_id":
 			if setting.Value == "" {
