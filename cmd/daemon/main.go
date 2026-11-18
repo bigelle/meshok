@@ -56,7 +56,6 @@ func loadConfig() *config.Config {
 }
 
 func setupLogger(cfg *config.Config) (log *slog.Logger, closure func()) {
-	// FIXME: read log level from env or flags
 	log, closure, err := logger.New(cfg.LogLevel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to set up logger: %s", err.Error())
